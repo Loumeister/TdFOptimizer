@@ -78,8 +78,6 @@ import itertools
 import re
 import sys
 import unittest
-
-main 
 from io import StringIO
 from pathlib import Path
 from typing import Iterable
@@ -95,30 +93,12 @@ from bs4 import BeautifulSoup
 ###############################################################################
 
 
-def _clean_price(raw: str) -> float:
-    return float(raw.rstrip("M").replace(",", "."))
-
-
-def _fallback_space_to_tab(path: Path) -> StringIO:
-    """Zet dubbele spaties in elke regel om naar tabs; retourneert buffer."""
-    with path.open(encoding="utf-8") as fh:
-        hdr = fh.readline()
-        cols = len(re.split(r"\s{2,}", hdr.rstrip("\n")))
-        out = [hdr]
-        for ln in fh:
-            parts = re.split(r"\s{2,}", ln.rstrip("\n"))
-            if len(parts) == cols:
-                out.append("\t".join(parts) + "\n")
-            else:
-                out.append(ln)
-    return StringIO("".join(out))
-
-# ── PARSE HELPERS ──────────────────────────────────────────────────────────
 def _clean_price(raw: str | float) -> float:
     """'7.1M' → 7.1  |  3.5  → 3.5"""
     if isinstance(raw, float):
         return raw
     return float(raw.rstrip("M").replace(",", "."))
+
 
 def _find_data_start_index(rows: list[str], sep: str) -> int:
     """Dynamically find the first data row."""
@@ -128,68 +108,43 @@ def _find_data_start_index(rows: list[str], sep: str) -> int:
             return i
     raise ValueError("No data row found")
 
-    
-def _read_and_clean_data(file_content_str: str, sep: str, header: list[str]) -> pd.DataFrame:
-    """Read CSV data, rename columns, convert types, and drop NaNs."""
-    df_raw = pd.read_csv(
-        StringIO(file_content_str),
+
+def _read_and_clean_data(
+    file_content_str: str, sep: str, header: list[str]
+) -> pd.DataFrame:
+        """Read CSV data, rename columns, convert types, and drop NaNs."""
+        df_raw = pd.read_csv(
+            StringIO(file_content_str),
+            sep=sep,
+            quoting=3,
+            names=header,
+            header=None,
+        )
+
+        # Map columns
+        df = df_raw.rename(
+            columns={
+                "FirstName": "first",  # Original column name was "Voornaam"
+                "LastName": "last",  # Original column name was "Achternaam"
+                "Price": "price_raw",  # Original column name was "Prijs"
+                "Total": "points",  # Original column name was "Totaal"
+            }
+        )
+
+        df["price"] = (
+            df["price_raw"]
+            .astype(str)
+            .str.replace("M", "", regex=False)
+            .str.replace(",", ".")
+            .astype(float)
+        )
+        df["points"] = pd.to_numeric(df["points"], errors="coerce")
+        df.dropna(subset=["first", "last", "price", "points"], inplace=True)
+
+        return df[["first", "last", "price", "points"]]
+
 
 def load_riders(tsv_path: str, sep="\t") -> pd.DataFrame:
-    # 1. -- Zoek eerste datarij dynamisch
-    with open(tsv_path, encoding="utf-8") as fh:
-        rows = fh.readlines()
-
-    def _first_data_idx(lines: list[str]) -> int:
-        for i, ln in enumerate(lines):
-            # eerste kolom is een rangnummer → begint met digit
-            if ln.split(sep)[0].strip().isdigit():
-                return i
-        raise ValueError("Geen datarij gevonden")
-
-    start = _first_data_idx(rows)
-
-    # 2. -- Lees vanaf die regel met de juiste header
-    header = [
-        "Voornaam", "Achternaam", "Team", "Prijs", "Etappe",
-        "Geel", "Groen", "Bolletjes", "Totaal",
-        "RoR", "Stop", "# actief", "# reserve"
-    ]
-    df_raw = pd.read_csv(
-        StringIO("".join(rows[start:])),
-
-        sep=sep,
-        quoting=3,
-        names=header,
-        header=None,
-    )
-
-    # Map columns
-    df = df_raw.rename(columns={
-        "FirstName": "first", # Original column name was "Voornaam"
-        "LastName": "last",   # Original column name was "Achternaam"
-        "Price": "price_raw", # Original column name was "Prijs"
-        "Total": "points",    # Original column name was "Totaal"
-
-    # 3. -- Kolommen mappen
-    df = df_raw.rename(columns={
-        "Voornaam": "first",
-        "Achternaam": "last",
-        "Prijs": "price_raw",
-        "Totaal": "points",
-    })
-
-    df["price"] = (
-        df["price_raw"].astype(str)
-        .str.replace("M", "", regex=False)
-        .str.replace(",", ".")
-        .astype(float)
-    )
-    df["points"] = pd.to_numeric(df["points"], errors="coerce")
-    df.dropna(subset=["first", "last", "price", "points"], inplace=True)
-
-    return df[["first", "last", "price", "points"]]
-
-def load_riders(tsv_path: str, sep="	") -> pd.DataFrame:
     with open(tsv_path, encoding="utf-8") as fh:
         rows = fh.readlines()
 
@@ -197,30 +152,34 @@ def load_riders(tsv_path: str, sep="	") -> pd.DataFrame:
 
     # These are the expected column names in the TSV file
     header = [
-        "FirstName", "LastName", "Team", "Price", "Stage",
-        "Yellow", "Green", "PolkaDot", "Total",
-        "RoR", "Stop", "# active", "# reserve"
+        "FirstName",
+        "LastName",
+        "Team",
+        "Price",
+        "Stage",
+        "Yellow",
+        "Green",
+        "PolkaDot",
+        "Total",
+        "RoR",
+        "Stop",
+        "# active",
+        "# reserve",
     ]
 
     file_content_str = "".join(rows[start_index:])
     return _read_and_clean_data(file_content_str, sep, header)
 
+
 ###############################################################################
 # ---------------------------  OPTIMIZATION  -------------------------------- #
 ###############################################################################
 
-def optimize_base(df, budget=110):
-    n = len(df)                         # ← line restored
-
-###############################################################################
-# ---------------------------  OPTIMALISATIE  ------------------------------- #
-###############################################################################
 
 def optimize_base(df, budget=110):
-    n = len(df)                         # ← regel teruggezet
-
+    n = len(df)
     pb = pulp.LpProblem("BaseTeam", pulp.LpMaximize)
-    b  = pulp.LpVariable.dicts("b", range(n), 0, 1, cat="Binary")
+    b = pulp.LpVariable.dicts("b", range(n), 0, 1, cat="Binary")
 
     pb += pulp.lpSum(b[i] for i in range(n)) == 15
     pb += pulp.lpSum(b[i] * df.price.iloc[i] for i in range(n)) <= budget
@@ -229,8 +188,7 @@ def optimize_base(df, budget=110):
     assert pb.solve(pulp.PULP_CBC_CMD(msg=False)) == pulp.LpStatusOptimal
     return [i for i in range(n) if b[i].value() == 1]
 
-# ── NIEUW: ILP-model voor drie reserves ────────────────────────────────────
-# ── NIEUW: correcte, niet-overlappende prijs­banden voor 3 reserves ──────────
+
 def optimize_reserves(df: pd.DataFrame, forbidden: set[int]) -> list[int]:
     n = len(df)
     r = pulp.LpVariable.dicts("r", range(n), 0, 1, cat="Binary")
@@ -238,70 +196,46 @@ def optimize_reserves(df: pd.DataFrame, forbidden: set[int]) -> list[int]:
 
     # exactly 3 reserves
     pb += pulp.lpSum(r.values()) == 3
-    for i in forbidden:                   # do not reuse base team riders
-
-    # precies 3 reserves
-    pb += pulp.lpSum(r.values()) == 3
-    for i in forbidden:                   # geen basisrenner dubbel gebruiken
-
+    for i in forbidden:  # do not reuse base team riders
         pb += r[i] == 0
 
     price = df.price
 
     # not more expensive than 10M
-
-    # niet duurder dan 10 M
-
     for i, p in enumerate(price):
         if p > 10:
             pb += r[i] == 0
 
-
     # disjoint categories → each exactly 1
-    # disjuncte categorieën → elk exactly 1
+    pb += pulp.lpSum(r[i] for i, p in enumerate(price) if 6 < p <= 10) == 1  # R1 (6–10]
+    pb += pulp.lpSum(r[i] for i, p in enumerate(price) if 2.5 < p <= 6) == 1  # R2 (2.5–6]
+    pb += pulp.lpSum(r[i] for i, p in enumerate(price) if p <= 2.5) == 1  # R3 ≤ 2.5
 
-    pb += pulp.lpSum(r[i] for i, p in enumerate(price)
-                     if 6 < p <= 10) == 1          # R1  (6 – 10]
-    pb += pulp.lpSum(r[i] for i, p in enumerate(price)
-                     if 2.5 < p <= 6) == 1         # R2  (2.5 – 6]
-    pb += pulp.lpSum(r[i] for i, p in enumerate(price)
-                     if p <= 2.5) == 1             # R3  ≤ 2.5
-
-
-    pb += pulp.lpSum(r[i] * df.points.iloc[i] for i in range(n))   # maximize
+    pb += pulp.lpSum(r[i] * df.points.iloc[i] for i in range(n))  # maximize
     status = pb.solve(pulp.PULP_CBC_CMD(msg=False))
     if status != pulp.LpStatusOptimal:
-        raise ValueError(f"PuLP could not find an optimal solution for reserves. Status: {pulp.LpStatus[status]}")
+        raise ValueError(
+            f"PuLP could not find an optimal solution for reserves. Status: {pulp.LpStatus[status]}"
+        )
     return [i for i in range(n) if r[i].value() == 1]
 
-# ── Fast greedy fallback with the same price band logic ───────────────────
+
 def greedy_reserves(df: pd.DataFrame, banned: set[int]) -> list[int]:
-    idx_r1 = df[~df.index.isin(banned) & (df.price <= 10) & (df.price > 6)]                 .points.idxmax()
+    idx_r1 = (
+        df[~df.index.isin(banned) & (df.price <= 10) & (df.price > 6)].points.idxmax()
+    )
     banned.add(idx_r1)
 
-    idx_r2 = df[~df.index.isin(banned) & (df.price <= 6) & (df.price > 2.5)]                 .points.idxmax()
+    idx_r2 = (
+        df[~df.index.isin(banned) & (df.price <= 6) & (df.price > 2.5)]
+        .points.idxmax()
+    )
     banned.add(idx_r2)
 
-    idx_r3 = df[~df.index.isin(banned) & (df.price <= 2.5)]                 .points.idxmax()
-
-    pb += pulp.lpSum(r[i] * df.points.iloc[i] for i in range(n))   # maximiseer
-    pb.solve(pulp.PULP_CBC_CMD(msg=False))
-    return [i for i in range(n) if r[i].value() == 1]
-
-# ── Snelle greedy-fallback met zelfde bandlogica ────────────────────────────
-def greedy_reserves(df: pd.DataFrame, banned: set[int]) -> list[int]:
-    idx_r1 = df[~df.index.isin(banned) & (df.price <= 10) & (df.price > 6)] \
-                .points.idxmax()
-    banned.add(idx_r1)
-
-    idx_r2 = df[~df.index.isin(banned) & (df.price <= 6) & (df.price > 2.5)] \
-                .points.idxmax()
-    banned.add(idx_r2)
-
-    idx_r3 = df[~df.index.isin(banned) & (df.price <= 2.5)] \
-                .points.idxmax()
+    idx_r3 = df[~df.index.isin(banned) & (df.price <= 2.5)].points.idxmax()
 
     return [idx_r1, idx_r2, idx_r3]
+
 
 ###############################################################################
 # ---------------------------  DNF SCRAPING  -------------------------------- #
@@ -316,7 +250,10 @@ def _cached_get(url: str, cache: dict[str, tuple[float, str]], ttl: int) -> str 
     try:
         r = requests.get(url, timeout=10)
         if r.status_code >= 400:
-            print(f"Warning: Failed to fetch {url}. Status code: {r.status_code}", file=sys.stderr)
+            print(
+                f"Warning: Failed to fetch {url}. Status code: {r.status_code}",
+                file=sys.stderr,
+            )
             return None
         cache[url] = (time(), r.text)
         return r.text
@@ -324,18 +261,12 @@ def _cached_get(url: str, cache: dict[str, tuple[float, str]], ttl: int) -> str 
         print(f"Error: Failed to fetch {url}. Error: {e}", file=sys.stderr)
         return None
 
-    r = requests.get(url, timeout=10)
-    if r.status_code >= 400:
-        return None
-    cache[url] = (time(), r.text)
-    return r.text
 
 def scrape_dnfs(slug: str, ttl: int) -> dict[str, int]:
     base = f"https://www.procyclingstats.com/race/{slug}/gc/stage-"
     cache: dict[str, tuple[float, str]] = {}
     dnfs: dict[str, int] = {}
     for st in itertools.count(1):
-
         stage_url = f"{base}{st}"
         html = _cached_get(stage_url, cache, ttl)
         if not html:
@@ -346,26 +277,20 @@ def scrape_dnfs(slug: str, ttl: int) -> dict[str, int]:
             sec = soup.find("div", id="did-not-finish")
             if not sec:
                 # This can be normal if no DNFs for a stage, or if page structure changed
-                print(f"Info: No DNF section found for stage {st}. URL: {stage_url}", file=sys.stderr)
+                print(
+                    f"Info: No DNF section found for stage {st}. URL: {stage_url}",
+                    file=sys.stderr,
+                )
                 continue
             for li in sec.select("li"):
                 nm = re.sub(r"\s+", " ", li.get_text(strip=True))
                 dnfs.setdefault(nm, st)
         except Exception as e:
-            print(f"Error: Failed to parse DNF data for stage {st}. URL: {stage_url}. Error: {e}", file=sys.stderr)
+            print(
+                f"Error: Failed to parse DNF data for stage {st}. URL: {stage_url}. Error: {e}",
+                file=sys.stderr,
+            )
             continue  # Try next stage even if current one fails
-
-        html = _cached_get(f"{base}{st}", cache, ttl)
-        if not html:
-            break
-        soup = BeautifulSoup(html, "html.parser")
-        sec = soup.find("div", id="did-not-finish")
-        if not sec:
-            continue
-        for li in sec.select("li"):
-            nm = re.sub(r"\s+", " ", li.get_text(strip=True))
-            dnfs.setdefault(nm, st)
-
     return dnfs
 
 
@@ -373,33 +298,29 @@ def scrape_dnfs(slug: str, ttl: int) -> dict[str, int]:
 # --------------------------  COMMAND-LINE  --------------------------------- #
 ###############################################################################
 
+
 def _parse(argv: Iterable[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="tdfoptimizer",
-
         description="Determine the optimal Tour-de-Farce team (15 base + 3 reserves)",
     )
     p.add_argument("tsv", help="Data file (TSV/CSV)")
-    p.add_argument("--sep", default="	", help="Input separator")
+    p.add_argument("--sep", default="\t", help="Input separator")
     p.add_argument("--race", help="PCS slug for DNF scraping")
-    p.add_argument("--max-price", type=float, default=110,
-                   help="Budget limit in millions of euros (default 110)")
-    p.add_argument("--csv-out", metavar="PATH", help="Write chosen team to CSV") # Changed PAD to PATH
-    p.add_argument("--cache", type=int, default=0,
-                   help="HTML cache duration (seconds) for PCS scraping")
-    p.add_argument("--test", action="store_true", help="Run unit tests and exit")
-
-        description="Bepaal het optimale Tour-de-Farce-team (15 basis + 3 reserves)",
+    p.add_argument(
+        "--max-price",
+        type=float,
+        default=110,
+        help="Budget limit in millions of euros (default 110)",
     )
-    p.add_argument("tsv", help="Data-bestand (TSV/CSV)")
-    p.add_argument("--sep", default="\t", help="Scheidingsteken in invoer")
-    p.add_argument("--race", help="PCS-slug voor DNF-scraping")
-    p.add_argument("--max-price", type=float, default=110,
-                   help="Budgetlimiet in miljoenen euro (default 110)")
-    p.add_argument("--csv-out", metavar="PAD", help="Schrijf gekozen team naar CSV")
-    p.add_argument("--cache", type=int, default=0,
-                   help="HTML-cacheduur (seconden) voor PCS-scraping")
-    p.add_argument("--test", action="store_true", help="Draai unittests en stop")
+    p.add_argument("--csv-out", metavar="PATH", help="Write chosen team to CSV")
+    p.add_argument(
+        "--cache",
+        type=int,
+        default=0,
+        help="HTML cache duration (seconds) for PCS scraping",
+    )
+    p.add_argument("--test", action="store_true", help="Run unit tests and exit")
 
     return p.parse_args(argv)
 
@@ -422,38 +343,24 @@ def main() -> None:
     if args.race:
         dnfs = scrape_dnfs(args.race, args.cache)
         if dnfs:
-            df = df[~df["last"].isin(dnfs)]      # remove riders who DNF'd
+            df = df[~df["last"].isin(dnfs)]  # remove riders who DNF'd
         print(f"DNFs processed: {len(dnfs)}")
 
     # -- optimization -------------------------------------------------------
     base_idx = optimize_base(df, args.max_price)
     try:
         res_idx = optimize_reserves(df, set(base_idx))
-    except ValueError as e: # Catching specific ValueError from optimize_reserves
-        print(f"Warning: ILP optimization for reserves failed: {e}. Falling back to greedy algorithm.", file=sys.stderr)
+    except ValueError as e:  # Catching specific ValueError from optimize_reserves
+        print(
+            f"Warning: ILP optimization for reserves failed: {e}. Falling back to greedy algorithm.",
+            file=sys.stderr,
+        )
         res_idx = greedy_reserves(df, set(base_idx))
-    except pulp.PulpSolverError as e: # Catching PuLP specific solver errors
-        print(f"Warning: PuLP solver error during reserve optimization: {e}. Falling back to greedy algorithm.", file=sys.stderr)
-        res_idx = greedy_reserves(df, set(base_idx))
-
-    # -- data-inlezen --------------------------------------------------------
-    src = Path(args.tsv)
-    if not src.is_file():
-        sys.exit(f"Dataset ‘{src}’ niet gevonden")
-    df = load_riders(src, sep=args.sep)
-
-    # -- optioneel DNF-scrapen ----------------------------------------------
-    if args.race:
-        dnfs = scrape_dnfs(args.race, args.cache)
-        if dnfs:
-            df = df[~df["last"].isin(dnfs)]      # uitvallers verwijderen
-        print(f"DNF’s verwerkt: {len(dnfs)}")
-
-    # -- optimalisatie -------------------------------------------------------
-    base_idx = optimize_base(df, args.max_price)
-    try:
-        res_idx = optimize_reserves(df, set(base_idx))
-    except Exception:                           # ILP faalt → greedy
+    except pulp.PulpSolverError as e:  # Catching PuLP specific solver errors
+        print(
+            f"Warning: PuLP solver error during reserve optimization: {e}. Falling back to greedy algorithm.",
+            file=sys.stderr,
+        )
         res_idx = greedy_reserves(df, set(base_idx))
 
     pick = base_idx + res_idx
@@ -461,10 +368,11 @@ def main() -> None:
     # -- output --------------------------------------------------------------
 
     print("=== Base Team (15) ===")
-    print("=== Basis (15) ===")
-
-    print(df.iloc[base_idx][["first", "last", "price", "points"]]
-        .sort_values("points", ascending=False))
+    print(
+        df.iloc[base_idx][["first", "last", "price", "points"]].sort_values(
+            "points", ascending=False
+        )
+    )
 
     print("=== Reserves (3) ===")
     print(df.iloc[res_idx][["first", "last", "price", "points"]])
@@ -476,20 +384,14 @@ def main() -> None:
         df.loc[pick].to_csv(args.csv_out, index=False)
         print("CSV written:", args.csv_out)
 
+
 class TestOptimizer(unittest.TestCase):
     def test_clean_price(self):
         self.assertEqual(_clean_price("7.1M"), 7.1)
-        self.assertEqual(_clean_price("3,5M"), 3.5) # Handles comma as decimal separator
-        self.assertEqual(_clean_price(5.0), 5.0)   # Handles float input
-        self.assertAlmostEqual(_clean_price("10M"), 10.0) # Handles "M" suffix
-        # The following cases might fail with the current _clean_price,
-        # as it only replaces "," with "." and rstrips "M".
-        # It does not handle thousands separators like "." in "1.000,5"
-        # or "," in "1,000.5" if the comma is not the decimal.
-        # For example, _clean_price("1.000,5M") would become float("1.000.5M") -> error
-        # _clean_price("1,000.5M") would become float("1.000.5M") -> error
-        # Let's stick to what the current function demonstrably supports.
-        # self.assertEqual(_clean_price("1000.5M"), 1000.5) # Assuming standard float conversion after M removal
+        self.assertEqual(_clean_price("3,5M"), 3.5)  # Handles comma as decimal separator
+        self.assertEqual(_clean_price(5.0), 5.0)  # Handles float input
+        self.assertAlmostEqual(_clean_price("10M"), 10.0)  # Handles "M" suffix
+
 
 if __name__ == "__main__":
     try:
@@ -497,16 +399,25 @@ if __name__ == "__main__":
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    except ValueError as e: # Catching other ValueErrors that might be raised from main/helpers
+    except ValueError as e:  # Catching other ValueErrors that might be raised from main/helpers
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Totaal prijs basis €M : {df.iloc[base_idx].price.sum():.1f}")
-    print(f"Punten basis          : {df.iloc[base_idx].points.sum():.0f}")
 
-    if args.csv_out:
-        df.loc[pick].to_csv(args.csv_out, index=False)
-        print("CSV geschreven:", args.csv_out)
+class TestOptimizer(unittest.TestCase):
+    def test_clean_price(self):
+        self.assertEqual(_clean_price("7.1M"), 7.1)
+        self.assertEqual(_clean_price("3,5M"), 3.5)  # Handles comma as decimal separator
+        self.assertEqual(_clean_price(5.0), 5.0)  # Handles float input
+        self.assertAlmostEqual(_clean_price("10M"), 10.0)  # Handles "M" suffix
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:  # Catching other ValueErrors that might be raised from main/helpers
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
