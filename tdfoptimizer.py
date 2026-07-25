@@ -185,7 +185,11 @@ def optimize_base(df, budget=110):
     pb += pulp.lpSum(b[i] * df.price.iloc[i] for i in range(n)) <= budget
     pb += pulp.lpSum(b[i] * df.points.iloc[i] for i in range(n))
 
-    assert pb.solve(pulp.PULP_CBC_CMD(msg=False)) == pulp.LpStatusOptimal
+    status = pb.solve(pulp.PULP_CBC_CMD(msg=False))
+    if status != pulp.LpStatusOptimal:
+        raise ValueError(
+            f"PuLP could not find an optimal solution for base team. Status: {pulp.LpStatus[status]}"
+        )
     return [i for i in range(n) if b[i].value() == 1]
 
 
