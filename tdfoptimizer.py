@@ -152,6 +152,7 @@ def load_riders(tsv_path: str, sep="\t") -> pd.DataFrame:
 
     # These are the expected column names in the TSV file
     header = [
+        "Rank",
         "FirstName",
         "LastName",
         "Team",
