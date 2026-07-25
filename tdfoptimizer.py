@@ -226,18 +226,22 @@ def optimize_reserves(df: pd.DataFrame, forbidden: set[int]) -> list[int]:
 
 
 def greedy_reserves(df: pd.DataFrame, banned: set[int]) -> list[int]:
-    idx_r1 = (
-        df[~df.index.isin(banned) & (df.price <= 10) & (df.price > 6)].points.idxmax()
-    )
+    band1 = df[~df.index.isin(banned) & (df.price <= 10) & (df.price > 6)]
+    if band1.empty:
+        raise ValueError("No reserve candidates available in price band (6, 10].")
+    idx_r1 = band1.points.idxmax()
     banned.add(idx_r1)
 
-    idx_r2 = (
-        df[~df.index.isin(banned) & (df.price <= 6) & (df.price > 2.5)]
-        .points.idxmax()
-    )
+    band2 = df[~df.index.isin(banned) & (df.price <= 6) & (df.price > 2.5)]
+    if band2.empty:
+        raise ValueError("No reserve candidates available in price band (2.5, 6].")
+    idx_r2 = band2.points.idxmax()
     banned.add(idx_r2)
 
-    idx_r3 = df[~df.index.isin(banned) & (df.price <= 2.5)].points.idxmax()
+    band3 = df[~df.index.isin(banned) & (df.price <= 2.5)]
+    if band3.empty:
+        raise ValueError("No reserve candidates available in price band (<= 2.5).")
+    idx_r3 = band3.points.idxmax()
 
     return [idx_r1, idx_r2, idx_r3]
 
