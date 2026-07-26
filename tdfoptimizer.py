@@ -214,7 +214,7 @@ def optimize_reserves(df: pd.DataFrame, forbidden: set[int]) -> list[int]:
     # disjoint categories → each exactly 1
     pb += pulp.lpSum(r[i] for i, p in enumerate(price) if 6 < p <= 10) == 1  # R1 (6–10]
     pb += pulp.lpSum(r[i] for i, p in enumerate(price) if 2.5 < p <= 6) == 1  # R2 (2.5–6]
-    pb += pulp.lpSum(r[i] for i, p in enumerate(price) if p <= 2.5) == 1  # R3 ≤ 2.5
+    pb += pulp.lpSum(r[i] for i, p in enumerate(price) if p <= 1.5) == 1  # R3 ≤ 1.5
 
     pb += pulp.lpSum(r[i] * df.points.iloc[i] for i in range(n))  # maximize
     status = pb.solve(pulp.PULP_CBC_CMD(msg=False))
@@ -238,9 +238,9 @@ def greedy_reserves(df: pd.DataFrame, banned: set[int]) -> list[int]:
     idx_r2 = band2.points.idxmax()
     banned.add(idx_r2)
 
-    band3 = df[~df.index.isin(banned) & (df.price <= 2.5)]
+    band3 = df[~df.index.isin(banned) & (df.price <= 1.5)]
     if band3.empty:
-        raise ValueError("No reserve candidates available with price <= 2.5.")
+        raise ValueError("No reserve candidates available with price <= 1.5.")
     idx_r3 = band3.points.idxmax()
 
     return [idx_r1, idx_r2, idx_r3]
